@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { WordEntry, DailyRecord, TestResult } from './types';
-import { scoreTest } from './services/geminiService';
+import { WordEntry, DailyRecord, TestResult } from './types.js';
+import { scoreTest } from './services/geminiService.js';
 import { 
   CalendarIcon, 
   PencilSquareIcon, 
@@ -210,7 +210,6 @@ const App: React.FC = () => {
     };
 
     try {
-      // POST 요청 - CORS 문제 때문에 응답을 직접 읽지는 못하지만 데이터는 전송됨
       await fetch(gasUrl, {
         method: "POST",
         mode: "no-cors",
@@ -221,7 +220,6 @@ const App: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      // 로컬 히스토리 업데이트
       const updatedRecord = { ...todayRecord, isCompleted: true };
       const newHistory = [...history.filter(r => r.date !== todayRecord.date), updatedRecord];
       setHistory(newHistory);
@@ -328,7 +326,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-24 max-w-xl mx-auto px-4 pt-6 flex flex-col gap-6 font-sans">
-      {/* Dynamic Header */}
       <header className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-indigo-100 border border-indigo-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 flex gap-2">
             <div className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full ${loadError ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -350,7 +347,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Navigation */}
       <nav className="flex bg-white/90 backdrop-blur-md p-1.5 rounded-[2rem] shadow-lg border border-white sticky top-4 z-50">
         {[
           { id: 'study', icon: PencilSquareIcon, label: '학습기록' },
@@ -372,7 +368,6 @@ const App: React.FC = () => {
       <main className="flex-1">
         {activeTab === 'study' && (
           <div className="flex flex-col gap-5 animate-in">
-            {/* Info Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
                <div className="flex justify-between items-center">
                  <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">General Info</h2>
@@ -392,13 +387,11 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* News Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest"><NewspaperIcon className="w-5 h-5 text-indigo-500" /> English News Journal</h3>
               <textarea placeholder="오늘 읽은 기사의 한 줄 요약을 적어봐..." disabled={todayRecord.isCompleted} value={todayRecord.newsContent} onChange={(e) => setTodayRecord({...todayRecord, newsContent: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm min-h-[100px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" />
             </section>
 
-            {/* Word List Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daily 13 Words</h3>
@@ -428,7 +421,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Calendar Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
               <h2 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-widest"><CalendarIcon className="w-5 h-5 text-indigo-500" /> Progress Calendar</h2>
               <div className="grid grid-cols-7 gap-3">
@@ -449,10 +441,8 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* ... (Test & Record Tabs remain similar but with consistent styling) ... */}
         {activeTab === 'test' && (
              <div className="animate-in">
-                {/* 기존 단어시험 UI (스타일만 동일하게 유지) */}
                 {testMode === 'none' ? (
                   <div className="grid grid-cols-1 gap-6">
                     <button onClick={() => startTest('today')} className="group bg-white p-10 rounded-[3rem] shadow-xl shadow-indigo-50 border border-indigo-50 text-left transition-all hover:scale-[1.02] active:scale-95">
@@ -474,7 +464,6 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="bg-white p-8 rounded-[3rem] shadow-2xl border border-slate-100 min-h-[500px] flex flex-col items-center justify-center animate-in">
-                    {/* Test Results and Questions Logic (App.tsx original logic follows) */}
                     {testResults.length === testWords.length ? (
                       <div className="space-y-8 w-full">
                         <div className="text-center">
@@ -563,7 +552,6 @@ const App: React.FC = () => {
                </div>
             </div>
 
-            {/* GAS 가이드 카드 */}
             <div className="bg-slate-800 p-8 rounded-[3rem] shadow-xl text-white space-y-6 overflow-hidden">
                <div className="flex items-center gap-3">
                  <div className="w-10 h-10 bg-indigo-500/20 rounded-2xl flex items-center justify-center">
