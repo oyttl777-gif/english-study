@@ -1,0 +1,7 @@
+{
+  "name": "Smart English Study",
+  "description": "A comprehensive English learning record app with AI-powered testing, 13-word daily tracking, and a progress calendar.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
