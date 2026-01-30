@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { WordEntry, DailyRecord, TestResult } from './types.js';
-import { scoreTest } from './services/geminiService.js';
+import { WordEntry, DailyRecord, TestResult } from './types';
+import { scoreTest } from './services/geminiService';
 import { 
   CalendarIcon, 
   PencilSquareIcon, 
@@ -326,6 +326,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen pb-24 max-w-xl mx-auto px-4 pt-6 flex flex-col gap-6 font-sans">
+      {/* Header */}
       <header className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-indigo-100 border border-indigo-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 flex gap-2">
             <div className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full ${loadError ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -347,6 +348,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {/* Navigation */}
       <nav className="flex bg-white/90 backdrop-blur-md p-1.5 rounded-[2rem] shadow-lg border border-white sticky top-4 z-50">
         {[
           { id: 'study', icon: PencilSquareIcon, label: '학습기록' },
@@ -368,6 +370,7 @@ const App: React.FC = () => {
       <main className="flex-1">
         {activeTab === 'study' && (
           <div className="flex flex-col gap-5 animate-in">
+            {/* Info Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
                <div className="flex justify-between items-center">
                  <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">General Info</h2>
@@ -387,11 +390,13 @@ const App: React.FC = () => {
                </div>
             </section>
 
+            {/* News Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest"><NewspaperIcon className="w-5 h-5 text-indigo-500" /> English News Journal</h3>
               <textarea placeholder="오늘 읽은 기사의 한 줄 요약을 적어봐..." disabled={todayRecord.isCompleted} value={todayRecord.newsContent} onChange={(e) => setTodayRecord({...todayRecord, newsContent: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm min-h-[100px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" />
             </section>
 
+            {/* Word List Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daily 13 Words</h3>
@@ -421,6 +426,7 @@ const App: React.FC = () => {
               </div>
             </section>
 
+            {/* Calendar Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
               <h2 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-widest"><CalendarIcon className="w-5 h-5 text-indigo-500" /> Progress Calendar</h2>
               <div className="grid grid-cols-7 gap-3">
@@ -552,6 +558,7 @@ const App: React.FC = () => {
                </div>
             </div>
 
+            {/* GAS 가이드 카드 */}
             <div className="bg-slate-800 p-8 rounded-[3rem] shadow-xl text-white space-y-6 overflow-hidden">
                <div className="flex items-center gap-3">
                  <div className="w-10 h-10 bg-indigo-500/20 rounded-2xl flex items-center justify-center">
@@ -562,7 +569,7 @@ const App: React.FC = () => {
                
                <div className="space-y-4">
                  <p className="text-xs text-slate-400 leading-relaxed">
-                   1. 구글 시트 상단 <strong>[확장 프로그램] -> [Apps Script]</strong>를 클릭해.<br/>
+                   1. 구글 시트 상단 <strong>[확장 프로그램] → [Apps Script]</strong>를 클릭해.<br/>
                    2. 아래 코드를 복사해서 기존 내용을 모두 지우고 붙여넣어.
                  </p>
                  
@@ -578,7 +585,7 @@ const App: React.FC = () => {
                  </div>
 
                  <p className="text-xs text-slate-400 leading-relaxed">
-                   3. <strong>[배포] -> [새 배포]</strong> 클릭!<br/>
+                   3. <strong>[배포] → [새 배포]</strong> 클릭!<br/>
                    4. 종류 선택: <strong>'웹 앱'</strong><br/>
                    5. 액세스 권한: <strong>'모든 사용자(Anyone)'</strong>로 설정!<br/>
                    6. 생성된 URL을 복사해서 위의 설정창에 붙여넣으면 끝!
