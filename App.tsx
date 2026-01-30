@@ -25,14 +25,12 @@ import {
 
 const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbwqJNte9iEsNvW_5CWwyxkdxYazw7nTQ_cH2W0GYQwqDDWFSReQII1xLXwXNSoxOfuGIA/exec";
 
-// 구글 시트에 복사해서 넣어야 할 표준 스크립트
 const GAS_CODE_TEMPLATE = `function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
   var data = JSON.parse(e.postData.contents);
   
   if (data.action === 'insert') {
-    // 단어들을 문자열로 합침
     var wordsStr = data.words.map(function(w) { return w.word + ":" + w.meaning; }).join(", ");
     
     sheet.appendRow([
@@ -94,7 +92,6 @@ const App: React.FC = () => {
   const [currentTestInput, setCurrentTestInput] = useState({ spelling: '', meaning: '' });
   const [isScoring, setIsScoring] = useState(false);
 
-  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -145,7 +142,7 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error(error);
-      setLoadError("데이터 로드 실패. 스크립트 URL을 확인해!");
+      setLoadError("데이터 로드 실패.");
     } finally {
       setIsLoadingSheet(false);
     }
@@ -225,10 +222,10 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('study_history', JSON.stringify(newHistory));
       
-      alert('성공적으로 저장됐어! 구글 시트를 확인해봐 ✨');
+      alert('성공적으로 저장됐어! ✨');
       setTimeout(() => fetchSheetData(gasUrl), 1500);
     } catch (e) {
-      alert('전송 중 오류가 발생했어. 설정에서 URL을 확인해봐!');
+      alert('전송 중 오류가 발생했어.');
     } finally {
       setIsSubmitting(false);
     }
@@ -321,12 +318,11 @@ const App: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('코드가 복사됐어! 구글 시트 스크립트 에디터에 붙여넣어줘.');
+    alert('코드가 복사됐어!');
   };
 
   return (
     <div className="min-h-screen pb-24 max-w-xl mx-auto px-4 pt-6 flex flex-col gap-6 font-sans">
-      {/* Header */}
       <header className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-indigo-100 border border-indigo-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 flex gap-2">
             <div className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full ${loadError ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -348,7 +344,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Navigation */}
       <nav className="flex bg-white/90 backdrop-blur-md p-1.5 rounded-[2rem] shadow-lg border border-white sticky top-4 z-50">
         {[
           { id: 'study', icon: PencilSquareIcon, label: '학습기록' },
@@ -370,7 +365,6 @@ const App: React.FC = () => {
       <main className="flex-1">
         {activeTab === 'study' && (
           <div className="flex flex-col gap-5 animate-in">
-            {/* Info Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
                <div className="flex justify-between items-center">
                  <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">General Info</h2>
@@ -390,13 +384,11 @@ const App: React.FC = () => {
                </div>
             </section>
 
-            {/* News Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest"><NewspaperIcon className="w-5 h-5 text-indigo-500" /> English News Journal</h3>
               <textarea placeholder="오늘 읽은 기사의 한 줄 요약을 적어봐..." disabled={todayRecord.isCompleted} value={todayRecord.newsContent} onChange={(e) => setTodayRecord({...todayRecord, newsContent: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm min-h-[100px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" />
             </section>
 
-            {/* Word List Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daily 13 Words</h3>
@@ -426,7 +418,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Calendar Card */}
             <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
               <h2 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-widest"><CalendarIcon className="w-5 h-5 text-indigo-500" /> Progress Calendar</h2>
               <div className="grid grid-cols-7 gap-3">
@@ -554,23 +545,22 @@ const App: React.FC = () => {
                    <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">Google Apps Script URL</label>
                    <input type="text" value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-[11px] font-mono text-slate-500 focus:border-indigo-500 outline-none" />
                  </div>
-                 <button onClick={() => { localStorage.setItem('study_gas_url', gasUrl); fetchSheetData(); alert('설정이 저장됐어! 다시 시트 동기화를 시도할게.'); }} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-[1.5rem] shadow-xl shadow-indigo-100 active:scale-95 transition-all">Save & Sync Now</button>
+                 <button onClick={() => { localStorage.setItem('study_gas_url', gasUrl); fetchSheetData(); alert('설정이 저장됐어!'); }} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-[1.5rem] shadow-xl shadow-indigo-100 active:scale-95 transition-all">Save & Sync Now</button>
                </div>
             </div>
 
-            {/* GAS 가이드 카드 */}
             <div className="bg-slate-800 p-8 rounded-[3rem] shadow-xl text-white space-y-6 overflow-hidden">
                <div className="flex items-center gap-3">
                  <div className="w-10 h-10 bg-indigo-500/20 rounded-2xl flex items-center justify-center">
                     <CodeBracketIcon className="w-6 h-6 text-indigo-400" />
                  </div>
-                 <h2 className="text-lg font-bold">기록이 안 된다면? (GAS 설정 가이드)</h2>
+                 <h2 className="text-lg font-bold">{"GAS 설정 가이드"}</h2>
                </div>
                
                <div className="space-y-4">
                  <p className="text-xs text-slate-400 leading-relaxed">
-                   1. 구글 시트 상단 <strong>[확장 프로그램] → [Apps Script]</strong>를 클릭해.<br/>
-                   2. 아래 코드를 복사해서 기존 내용을 모두 지우고 붙여넣어.
+                   {"1. 구글 시트 상단 [확장 프로그램]"} <strong>{" → "}</strong> {"[Apps Script]를 클릭해."}<br/>
+                   {"2. 아래 코드를 복사해서 기존 내용을 모두 지우고 붙여넣어."}
                  </p>
                  
                  <div className="relative group">
@@ -585,10 +575,10 @@ const App: React.FC = () => {
                  </div>
 
                  <p className="text-xs text-slate-400 leading-relaxed">
-                   3. <strong>[배포] → [새 배포]</strong> 클릭!<br/>
-                   4. 종류 선택: <strong>'웹 앱'</strong><br/>
-                   5. 액세스 권한: <strong>'모든 사용자(Anyone)'</strong>로 설정!<br/>
-                   6. 생성된 URL을 복사해서 위의 설정창에 붙여넣으면 끝!
+                   {"3. [배포]"} <strong>{" → "}</strong> {"[새 배포] 클릭!"}<br/>
+                   {"4. 종류 선택: [웹 앱]"}<br/>
+                   {"5. 액세스 권한: [모든 사용자(Anyone)]로 설정!"}<br/>
+                   {"6. 생성된 URL을 복사해서 위의 설정창에 붙여넣으면 끝!"}
                  </p>
                </div>
             </div>
