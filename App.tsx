@@ -18,10 +18,44 @@ import {
   CloudArrowDownIcon,
   ExclamationCircleIcon,
   Cog6ToothIcon,
-  ClockIcon
+  CodeBracketIcon,
+  ChevronRightIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 
 const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbwqJNte9iEsNvW_5CWwyxkdxYazw7nTQ_cH2W0GYQwqDDWFSReQII1xLXwXNSoxOfuGIA/exec";
+
+// 구글 시트에 복사해서 넣어야 할 표준 스크립트
+const GAS_CODE_TEMPLATE = `function doPost(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  if (data.action === 'insert') {
+    // 단어들을 문자열로 합침
+    var wordsStr = data.words.map(function(w) { return w.word + ":" + w.meaning; }).join(", ");
+    
+    sheet.appendRow([
+      new Date(), 
+      data.date, 
+      data.page, 
+      wordsStr, 
+      data.news, 
+      data.status
+    ]);
+    
+    return ContentService.createTextOutput(JSON.stringify({result: "success"}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
 
 const getTodayString = () => {
   const now = new Date();
@@ -39,6 +73,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'study' | 'test' | 'record' | 'settings'>('study');
   const [gasUrl, setGasUrl] = useState<string>(DEFAULT_GAS_URL);
   const [testMode, setTestMode] = useState<'none' | 'today' | 'cumulative'>('none');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [todayRecord, setTodayRecord] = useState<DailyRecord>({
     date: getTodayString(),
     page: '',
@@ -46,6 +82,7 @@ const App: React.FC = () => {
     newsContent: '',
     isCompleted: false,
   });
+  
   const [history, setHistory] = useState<DailyRecord[]>([]);
   const [sheetWords, setSheetWords] = useState<WordEntry[]>([]);
   const [isLoadingSheet, setIsLoadingSheet] = useState(false);
@@ -88,14 +125,14 @@ const App: React.FC = () => {
     setLoadError(null);
     try {
       const url = `${targetUrl}?action=read&t=${Date.now()}`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Status: ${response.status}`);
+      const response = await fetch(url, { redirect: 'follow' });
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       const rawData = await response.json();
       const dataArray = Array.isArray(rawData) ? rawData : (rawData.data || []);
 
       if (dataArray.length > 0) {
         const parsedWords: WordEntry[] = dataArray
-          .slice(1) // 헤더 제외
+          .slice(1)
           .map((item: any) => ({
             word: String(Array.isArray(item) ? item[2] : (item.영어단어 || item.word || "")).trim(),
             meaning: String(Array.isArray(item) ? item[3] : (item.의미 || item.meaning || "")).trim()
@@ -107,7 +144,8 @@ const App: React.FC = () => {
         setSheetWords(Array.from(uniqueMap.values()));
       }
     } catch (error: any) {
-      setLoadError("데이터 동기화 실패. URL을 확인하세요.");
+      console.error(error);
+      setLoadError("데이터 로드 실패. 스크립트 URL을 확인해!");
     } finally {
       setIsLoadingSheet(false);
     }
@@ -156,14 +194,11 @@ const App: React.FC = () => {
   const submitStudy = async () => {
     const filledWords = todayRecord.words.filter(w => w.word.trim() !== "");
     if (filledWords.length === 0) {
-      alert("단어를 하나 이상 입력해주세요!");
+      alert("단어를 하나라도 적어줘!");
       return;
     }
 
-    const updatedRecord = { ...todayRecord, isCompleted: true };
-    const newHistory = [...history.filter(r => r.date !== todayRecord.date), updatedRecord];
-    setHistory(newHistory);
-    localStorage.setItem('study_history', JSON.stringify(newHistory));
+    setIsSubmitting(true);
     
     const payload = {
       action: "insert",
@@ -175,15 +210,29 @@ const App: React.FC = () => {
     };
 
     try {
+      // POST 요청 - CORS 문제 때문에 응답을 직접 읽지는 못하지만 데이터는 전송됨
       await fetch(gasUrl, {
         method: "POST",
         mode: "no-cors",
+        cache: 'no-cache',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
-      alert('시트로 저장되었습니다!');
-      setTimeout(() => fetchSheetData(gasUrl), 2000);
+
+      // 로컬 히스토리 업데이트
+      const updatedRecord = { ...todayRecord, isCompleted: true };
+      const newHistory = [...history.filter(r => r.date !== todayRecord.date), updatedRecord];
+      setHistory(newHistory);
+      localStorage.setItem('study_history', JSON.stringify(newHistory));
+      
+      alert('성공적으로 저장됐어! 구글 시트를 확인해봐 ✨');
+      setTimeout(() => fetchSheetData(gasUrl), 1500);
     } catch (e) {
-      alert('시트 전송에 실패했습니다.');
+      alert('전송 중 오류가 발생했어. 설정에서 URL을 확인해봐!');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -196,7 +245,7 @@ const App: React.FC = () => {
     }
 
     if (sourceWords.length === 0) {
-      alert('테스트할 단어가 없습니다.');
+      alert('시험 볼 단어가 없어!');
       return;
     }
 
@@ -212,17 +261,28 @@ const App: React.FC = () => {
   const handleNextTest = async () => {
     if (isScoring) return;
     setIsScoring(true);
-    const target = testWords[testStep];
-    const score = await scoreTest(target.word, target.meaning, currentTestInput.spelling, currentTestInput.meaning);
-    setTestResults([...testResults, { ...target, userSpelling: currentTestInput.spelling, userMeaning: currentTestInput.meaning, isCorrect: score.isCorrect, feedback: score.feedback }]);
-    setIsScoring(false);
-    if (testStep < testWords.length - 1) {
-      setTestStep(testStep + 1);
-      setCurrentTestInput({ spelling: '', meaning: '' });
+    try {
+      const target = testWords[testStep];
+      const score = await scoreTest(target.word, target.meaning, currentTestInput.spelling, currentTestInput.meaning);
+      setTestResults(prev => [...prev, { 
+        ...target, 
+        userSpelling: currentTestInput.spelling, 
+        userMeaning: currentTestInput.meaning, 
+        isCorrect: score.isCorrect, 
+        feedback: score.feedback 
+      }]);
+      
+      if (testStep < testWords.length - 1) {
+        setTestStep(testStep + 1);
+        setCurrentTestInput({ spelling: '', meaning: '' });
+      }
+    } catch (err) {
+      alert("AI 선생님과 연결이 안 돼!");
+    } finally {
+      setIsScoring(false);
     }
   };
 
-  // Recording Logic
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -245,7 +305,7 @@ const App: React.FC = () => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
     } catch (err) { 
-      alert("마이크 권한을 허용해주세요."); 
+      alert("마이크 권한을 허용해줘!"); 
     }
   };
 
@@ -261,32 +321,48 @@ const App: React.FC = () => {
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('코드가 복사됐어! 구글 시트 스크립트 에디터에 붙여넣어줘.');
+  };
+
   return (
-    <div className="min-h-screen pb-24 max-w-2xl mx-auto p-4 flex flex-col gap-6">
-      <header className="flex flex-col gap-1 items-center py-6 bg-white rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-            <div className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${loadError ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
-                {loadError ? <ExclamationCircleIcon className="w-3 h-3" /> : <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />}
-                {sheetWords.length}단어 누적
+    <div className="min-h-screen pb-24 max-w-xl mx-auto px-4 pt-6 flex flex-col gap-6 font-sans">
+      {/* Dynamic Header */}
+      <header className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-indigo-100 border border-indigo-50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 flex gap-2">
+            <div className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full ${loadError ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-600'}`}>
+                {isLoadingSheet ? <ArrowPathIcon className="w-3 h-3 animate-spin" /> : (loadError ? <ExclamationCircleIcon className="w-3 h-3" /> : <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />)}
+                {sheetWords.length}단어 마스터
             </div>
-            <button onClick={() => fetchSheetData()} className={`p-1.5 rounded-full hover:bg-slate-100 ${isLoadingSheet ? 'animate-spin' : ''}`}>
-                <CloudArrowDownIcon className="w-5 h-5 text-indigo-400" />
+            <button onClick={() => fetchSheetData()} className="p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
+                <CloudArrowDownIcon className="w-5 h-5 text-slate-400" />
             </button>
         </div>
-        <h1 className="text-2xl font-bold text-indigo-600 flex items-center gap-2">
-          <AcademicCapIcon className="w-8 h-8" /> 중학생 영어 기록장
-        </h1>
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+             <AcademicCapIcon className="w-7 h-7 text-white" />
+           </div>
+           <div>
+             <h1 className="text-xl font-bold text-slate-800 tracking-tight">영단어 기록장</h1>
+             <p className="text-[11px] text-slate-400 font-medium tracking-wide">오늘도 공부 완료! 🚀</p>
+           </div>
+        </div>
       </header>
 
-      <nav className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-100 sticky top-4 z-50">
+      {/* Navigation */}
+      <nav className="flex bg-white/90 backdrop-blur-md p-1.5 rounded-[2rem] shadow-lg border border-white sticky top-4 z-50">
         {[
-          { id: 'study', icon: PencilSquareIcon, label: '기록' },
-          { id: 'test', icon: ArrowPathIcon, label: '테스트' },
-          { id: 'record', icon: MicrophoneIcon, label: '발음' },
+          { id: 'study', icon: PencilSquareIcon, label: '학습기록' },
+          { id: 'test', icon: ArrowPathIcon, label: '단어시험' },
+          { id: 'record', icon: MicrophoneIcon, label: '발음연습' },
           { id: 'settings', icon: Cog6ToothIcon, label: '설정' }
         ].map(tab => (
-          <button key={tab.id} onClick={() => { setActiveTab(tab.id as any); setTestMode('none'); }} className={`flex-1 flex flex-col items-center py-3 rounded-xl transition-all ${activeTab === tab.id ? 'bg-indigo-50 text-indigo-600 shadow-inner' : 'text-slate-400'}`}>
+          <button 
+            key={tab.id} 
+            onClick={() => { setActiveTab(tab.id as any); setTestMode('none'); }} 
+            className={`flex-1 flex flex-col items-center py-3 rounded-2xl transition-all duration-300 ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}
+          >
             <tab.icon className="w-6 h-6" />
             <span className="text-[10px] mt-1 font-bold">{tab.label}</span>
           </button>
@@ -295,187 +371,173 @@ const App: React.FC = () => {
 
       <main className="flex-1">
         {activeTab === 'study' && (
-          <div className="flex flex-col gap-6 animate-fadeIn">
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-               <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                 <h2 className="text-lg font-bold text-slate-800">기본 정보</h2>
-                 <span className={`px-4 py-1 rounded-full text-[11px] font-bold ${todayRecord.isCompleted ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {todayRecord.isCompleted ? '학습완료' : '기록중'}
+          <div className="flex flex-col gap-5 animate-in">
+            {/* Info Card */}
+            <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
+               <div className="flex justify-between items-center">
+                 <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">General Info</h2>
+                 <span className={`px-4 py-1 rounded-full text-[10px] font-black ${todayRecord.isCompleted ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {todayRecord.isCompleted ? 'COMPLETED' : 'IN PROGRESS'}
                  </span>
                </div>
                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">날짜</label>
-                    <input type="date" value={todayRecord.date} onChange={(e) => handleDateChange(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-2 text-sm font-bold text-slate-700 outline-none" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 ml-1">DATE</label>
+                    <input type="date" value={todayRecord.date} onChange={(e) => handleDateChange(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">페이지 범위</label>
-                    <input type="text" placeholder="예: 10-15" disabled={todayRecord.isCompleted} value={todayRecord.page} onChange={(e) => setTodayRecord({...todayRecord, page: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-lg px-2 py-2 text-sm outline-none" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 ml-1">PAGES</label>
+                    <input type="text" placeholder="e.g. 10-25" disabled={todayRecord.isCompleted} value={todayRecord.page} onChange={(e) => setTodayRecord({...todayRecord, page: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
                   </div>
                </div>
-            </div>
+            </section>
 
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-3">
-              <h3 className="font-bold text-slate-700 flex items-center gap-2"><NewspaperIcon className="w-5 h-5 text-indigo-500" />영자신문 읽기</h3>
-              <textarea placeholder="뉴스 내용을 간단히 적어보세요..." disabled={todayRecord.isCompleted} value={todayRecord.newsContent} onChange={(e) => setTodayRecord({...todayRecord, newsContent: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm min-h-[80px] outline-none" />
-            </div>
+            {/* News Card */}
+            <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest"><NewspaperIcon className="w-5 h-5 text-indigo-500" /> English News Journal</h3>
+              <textarea placeholder="오늘 읽은 기사의 한 줄 요약을 적어봐..." disabled={todayRecord.isCompleted} value={todayRecord.newsContent} onChange={(e) => setTodayRecord({...todayRecord, newsContent: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm min-h-[100px] focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none" />
+            </section>
 
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-3">
-              <h3 className="font-bold text-slate-700">오늘의 단어 (13개)</h3>
-              <div className="grid grid-cols-1 gap-2">
+            {/* Word List Card */}
+            <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Daily 13 Words</h3>
+                <span className="text-[10px] font-bold text-indigo-500">{todayRecord.words.filter(w => w.word).length} / 13</span>
+              </div>
+              <div className="grid grid-cols-1 gap-2.5">
                 {todayRecord.words.map((w, idx) => (
                   <div key={idx} className="flex gap-2 items-center group">
-                    <span className="w-6 text-[10px] font-bold text-slate-300 group-focus-within:text-indigo-400 transition-colors">{idx + 1}</span>
-                    <input type="text" placeholder="Word" disabled={todayRecord.isCompleted} value={w.word} onChange={(e) => handleWordChange(idx, 'word', e.target.value)} className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-indigo-300 transition-all" />
-                    <input type="text" placeholder="뜻" disabled={todayRecord.isCompleted} value={w.meaning} onChange={(e) => handleWordChange(idx, 'meaning', e.target.value)} className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-indigo-300 transition-all" />
+                    <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] font-bold text-slate-400 group-focus-within:bg-indigo-600 group-focus-within:text-white transition-all">
+                      {idx + 1}
+                    </div>
+                    <input type="text" placeholder="Word" disabled={todayRecord.isCompleted} value={w.word} onChange={(e) => handleWordChange(idx, 'word', e.target.value)} className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 transition-all" />
+                    <input type="text" placeholder="뜻" disabled={todayRecord.isCompleted} value={w.meaning} onChange={(e) => handleWordChange(idx, 'meaning', e.target.value)} className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 transition-all" />
                   </div>
                 ))}
               </div>
               <div className="pt-6">
                 {todayRecord.isCompleted ? (
-                  <button onClick={() => setTodayRecord({...todayRecord, isCompleted: false})} className="w-full bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 border border-slate-200">
-                    <PencilSquareIcon className="w-5 h-5" /> 다시 수정하기
+                  <button onClick={() => setTodayRecord({...todayRecord, isCompleted: false})} className="w-full bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-200 transition-colors">
+                    <PencilSquareIcon className="w-5 h-5" /> 내용 수정하기
                   </button>
                 ) : (
-                  <button onClick={submitStudy} className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <CheckCircleIcon className="w-5 h-5" /> 학습완료 제출 & 시트 저장
+                  <button onClick={submitStudy} disabled={isSubmitting} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-2xl shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+                    {isSubmitting ? <><ArrowPathIcon className="w-6 h-6 animate-spin" /> 저장 중...</> : <><CheckCircleIcon className="w-6 h-6" /> 학습 완료 & 저장하기</>}
                   </button>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <h2 className="text-lg font-bold mb-4 text-slate-800 flex items-center gap-2"><CalendarIcon className="w-6 h-6 text-indigo-500" />진도 달력</h2>
-              <div className="grid grid-cols-7 gap-2 text-center">
-                {['일','월','화','수','목','금','토'].map(d => (<div key={d} className="text-[10px] font-bold text-slate-400 py-1">{d}</div>))}
+            {/* Calendar Card */}
+            <section className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+              <h2 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-widest"><CalendarIcon className="w-5 h-5 text-indigo-500" /> Progress Calendar</h2>
+              <div className="grid grid-cols-7 gap-3">
+                {['S','M','T','W','T','F','S'].map(d => (<div key={d} className="text-[10px] font-black text-slate-300 py-1 text-center">{d}</div>))}
                 {calendarData.days.map((dayObj, i) => {
                   if (!dayObj) return <div key={`empty-${i}`} />;
                   const isFinished = history.some(r => r.date === dayObj.dateStr && r.isCompleted);
                   const isSelected = dayObj.dateStr === todayRecord.date;
                   return (
-                    <button key={i} onClick={() => handleDateChange(dayObj.dateStr)} className={`aspect-square flex flex-col items-center justify-center rounded-xl border transition-all ${isFinished ? 'bg-green-50 border-green-100' : isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-50'}`}>
+                    <button key={i} onClick={() => handleDateChange(dayObj.dateStr)} className={`aspect-square flex flex-col items-center justify-center rounded-2xl border transition-all ${isFinished ? 'bg-green-50 border-green-100' : isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-50 hover:bg-slate-100'}`}>
                       <span className="text-[11px] font-bold">{dayObj.day}</span>
-                      {isFinished && !isSelected && <div className="w-1 h-1 bg-green-400 rounded-full mt-0.5" />}
+                      {isFinished && !isSelected && <div className="w-1 h-1 bg-green-500 rounded-full mt-1 animate-pulse" />}
                     </button>
                   );
                 })}
               </div>
-            </div>
+            </section>
           </div>
         )}
 
+        {/* ... (Test & Record Tabs remain similar but with consistent styling) ... */}
         {activeTab === 'test' && (
-          <div className="animate-fadeIn">
-            {testMode === 'none' ? (
-              <div className="grid grid-cols-1 gap-6">
-                <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 text-center space-y-5">
-                  <BookOpenIcon className="w-12 h-12 text-indigo-600 mx-auto" />
-                  <h2 className="text-xl font-bold text-slate-800">오늘 단어 테스트</h2>
-                  <button onClick={() => startTest('today')} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-[1.5rem] shadow-lg active:scale-95">시작하기</button>
-                </div>
-                <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 text-center space-y-5">
-                  <SparklesIcon className="w-12 h-12 text-violet-600 mx-auto" />
-                  <h2 className="text-xl font-bold text-slate-800">누적 랜덤 테스트</h2>
-                  <p className="text-xs text-slate-400">시트의 모든 단어 중 5개를 뽑습니다.</p>
-                  <button onClick={() => startTest('cumulative')} className="w-full bg-violet-600 text-white font-bold py-5 rounded-[1.5rem] shadow-lg active:scale-95 disabled:opacity-50" disabled={sheetWords.length === 0 && history.length === 0}>
-                    누적 테스트 시작 ({sheetWords.length}개 발견)
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[450px] flex flex-col justify-center text-center relative">
-                {testResults.length === testWords.length ? (
-                  <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-slate-800">결과: {testResults.filter(r => r.isCorrect).length}/{testWords.length}</h2>
-                    <div className="space-y-2 text-left max-h-[300px] overflow-y-auto">
-                      {testResults.map((r, i) => (
-                        <div key={i} className={`p-4 rounded-2xl border ${r.isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-                          <div className="flex justify-between font-bold text-sm"><span>{r.word}</span><span className={r.isCorrect ? 'text-green-600' : 'text-red-500'}>{r.isCorrect ? '정답' : '오답'}</span></div>
-                          <p className="text-[11px] text-slate-500 mt-1">{r.feedback}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={() => setTestMode('none')} className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl">닫기</button>
+             <div className="animate-in">
+                {/* 기존 단어시험 UI (스타일만 동일하게 유지) */}
+                {testMode === 'none' ? (
+                  <div className="grid grid-cols-1 gap-6">
+                    <button onClick={() => startTest('today')} className="group bg-white p-10 rounded-[3rem] shadow-xl shadow-indigo-50 border border-indigo-50 text-left transition-all hover:scale-[1.02] active:scale-95">
+                      <div className="w-14 h-14 bg-indigo-100 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <BookOpenIcon className="w-8 h-8 text-indigo-600 group-hover:text-white" />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-800">Today's Focus</h2>
+                      <p className="text-xs text-slate-400 mt-1">오늘 공부한 단어 바로 테스트!</p>
+                      <div className="mt-6 flex items-center gap-2 text-indigo-600 font-bold text-sm">시험 보기 <ChevronRightIcon className="w-4 h-4" /></div>
+                    </button>
+                    <button onClick={() => startTest('cumulative')} className="group bg-white p-10 rounded-[3rem] shadow-xl shadow-violet-50 border border-violet-50 text-left transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50" disabled={sheetWords.length === 0}>
+                      <div className="w-14 h-14 bg-violet-100 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                        <SparklesIcon className="w-8 h-8 text-violet-600 group-hover:text-white" />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-800">Power Mix</h2>
+                      <p className="text-xs text-slate-400 mt-1">누적된 단어 중 5개 랜덤 도전!</p>
+                      <div className="mt-6 flex items-center gap-2 text-violet-600 font-bold text-sm">도전하기 <ChevronRightIcon className="w-4 h-4" /></div>
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-8">
-                    <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Question {testStep + 1} / {testWords.length}</div>
-                    <button onClick={() => {
-                        const utterance = new SpeechSynthesisUtterance(testWords[testStep].word);
-                        utterance.lang = 'en-US';
-                        window.speechSynthesis.speak(utterance);
-                    }} className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto active:scale-90 transition-all">
-                      <SpeakerWaveIcon className="w-10 h-10 text-indigo-600" />
-                    </button>
-                    <div className="space-y-4 max-w-sm mx-auto">
-                      <input type="text" placeholder="Spelling" value={currentTestInput.spelling} onChange={(e) => setCurrentTestInput({...currentTestInput, spelling: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-                      <input type="text" placeholder="뜻" value={currentTestInput.meaning} onChange={(e) => setCurrentTestInput({...currentTestInput, meaning: e.target.value})} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-center text-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-                    </div>
-                    <button onClick={handleNextTest} disabled={isScoring || !currentTestInput.spelling.trim()} className="w-full max-w-sm mx-auto bg-indigo-600 text-white font-bold py-5 rounded-2xl flex items-center justify-center gap-2 active:scale-95">
-                      {isScoring ? 'AI 채점중...' : '제출'}
-                    </button>
+                  <div className="bg-white p-8 rounded-[3rem] shadow-2xl border border-slate-100 min-h-[500px] flex flex-col items-center justify-center animate-in">
+                    {/* Test Results and Questions Logic (App.tsx original logic follows) */}
+                    {testResults.length === testWords.length ? (
+                      <div className="space-y-8 w-full">
+                        <div className="text-center">
+                          <CheckCircleIcon className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                          <h2 className="text-2xl font-bold text-slate-800">결과: {testResults.filter(r => r.isCorrect).length} / {testWords.length}</h2>
+                        </div>
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto px-2">
+                          {testResults.map((r, i) => (
+                            <div key={i} className={`p-4 rounded-2xl border ${r.isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
+                              <div className="flex justify-between font-bold text-sm text-slate-800"><span>{r.word}</span><span>{r.isCorrect ? '⭕' : '❌'}</span></div>
+                              <p className="text-[10px] text-slate-500 mt-1">{r.feedback}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => setTestMode('none')} className="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl">닫기</button>
+                      </div>
+                    ) : (
+                      <div className="w-full space-y-8">
+                         <div className="text-center space-y-4">
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Question {testStep + 1} of {testWords.length}</span>
+                            <button onClick={() => {
+                                const utterance = new SpeechSynthesisUtterance(testWords[testStep].word);
+                                utterance.lang = 'en-US';
+                                window.speechSynthesis.speak(utterance);
+                            }} className="w-24 h-24 bg-indigo-50 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner hover:bg-indigo-100 transition-all">
+                              <SpeakerWaveIcon className="w-10 h-10 text-indigo-600" />
+                            </button>
+                         </div>
+                         <div className="space-y-4">
+                            <input type="text" placeholder="Spelling?" value={currentTestInput.spelling} onChange={(e) => setCurrentTestInput({...currentTestInput, spelling: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-center text-xl font-bold outline-none focus:border-indigo-500" />
+                            <input type="text" placeholder="뜻?" value={currentTestInput.meaning} onChange={(e) => setCurrentTestInput({...currentTestInput, meaning: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-center text-xl font-bold outline-none focus:border-indigo-500" />
+                         </div>
+                         <button onClick={handleNextTest} disabled={isScoring} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-3xl shadow-lg shadow-indigo-100 flex justify-center items-center gap-2">
+                           {isScoring ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : '다음 문제'}
+                         </button>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+             </div>
         )}
 
         {activeTab === 'record' && (
-          <div className="animate-fadeIn">
-            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 text-center space-y-8">
-              <div className={`w-28 h-28 rounded-full flex items-center justify-center mx-auto transition-all relative ${isRecording ? 'bg-red-50 animate-pulse' : 'bg-indigo-50'}`}>
-                <MicrophoneIcon className={`w-12 h-12 ${isRecording ? 'text-red-600' : 'text-indigo-600'}`} />
-                {isRecording && (
-                   <div className="absolute -bottom-2 bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">REC</div>
-                )}
+          <div className="animate-in">
+            <div className="bg-white p-12 rounded-[3.5rem] shadow-xl border border-slate-100 text-center space-y-10">
+              <h2 className="text-2xl font-bold text-slate-800">English Pronunciation</h2>
+              <div className="relative w-40 h-40 mx-auto">
+                 {isRecording && <div className="absolute inset-0 bg-red-400/20 rounded-full animate-ping" />}
+                 <div className={`w-40 h-40 rounded-full flex items-center justify-center mx-auto relative z-10 ${isRecording ? 'bg-red-500 shadow-2xl shadow-red-200' : 'bg-indigo-50 shadow-inner'}`}>
+                  <MicrophoneIcon className={`w-16 h-16 ${isRecording ? 'text-white' : 'text-indigo-600'}`} />
+                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <h2 className="text-xl font-bold text-slate-800">영어 발음 연습</h2>
-                {isRecording && (
-                   <div className="flex items-center justify-center gap-1.5 text-red-600 font-mono font-bold text-lg">
-                     <ClockIcon className="w-5 h-5" />
-                     {formatTime(recordingTime)}
-                   </div>
-                )}
-              </div>
-
-              <div className="flex gap-4 justify-center">
+              <div className="flex gap-5 justify-center">
                 {!isRecording ? (
-                  <button onClick={startRecording} className="bg-indigo-600 text-white font-bold px-10 py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center gap-2">
-                    <MicrophoneIcon className="w-5 h-5" /> 녹음 시작
-                  </button>
+                  <button onClick={startRecording} className="bg-indigo-600 text-white font-bold px-12 py-5 rounded-[2rem] active:scale-95 transition-all">REC START</button>
                 ) : (
-                  <button onClick={stopRecording} className="bg-red-600 text-white font-bold px-10 py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center gap-2">
-                    <StopIcon className="w-5 h-5" /> 녹음 중지
-                  </button>
+                  <button onClick={stopRecording} className="bg-red-600 text-white font-bold px-12 py-5 rounded-[2rem] active:scale-95 transition-all">STOP ({formatTime(recordingTime)})</button>
                 )}
               </div>
-
               {audioUrl && !isRecording && (
-                <div className="pt-8 border-t border-slate-100 flex flex-col items-center gap-4 animate-fadeIn">
-                  <div className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                       <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center">
-                          <PlayIcon className="w-5 h-5 text-white" />
-                       </div>
-                       <div className="text-left">
-                         <div className="text-xs font-bold text-slate-700">최근 녹음 파일</div>
-                         <div className="text-[10px] text-slate-400">캐시 메모리에 저장됨</div>
-                       </div>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        const audio = new Audio(audioUrl);
-                        audio.play();
-                      }} 
-                      className="bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-sm active:scale-95 transition-all"
-                    >
-                      재생하기
-                    </button>
-                  </div>
-                  <button onClick={() => setAudioUrl(null)} className="text-slate-400 text-xs underline hover:text-red-500 transition-colors">기록 삭제</button>
+                <div className="pt-10 border-t border-slate-100 flex flex-col items-center gap-4">
+                  <button onClick={() => new Audio(audioUrl).play()} className="bg-slate-800 text-white font-bold px-8 py-4 rounded-2xl">내 발음 듣기 🎧</button>
+                  <button onClick={() => setAudioUrl(null)} className="text-slate-400 text-xs font-bold uppercase tracking-widest">Discard</button>
                 </div>
               )}
             </div>
@@ -483,17 +545,62 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'settings' && (
-          <div className="animate-fadeIn space-y-6">
-            <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-6">
-               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Cog6ToothIcon className="w-6 h-6 text-indigo-600" /> 설정</h2>
+          <div className="animate-in space-y-6">
+            <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-100 space-y-6">
+               <div className="flex items-center gap-3 mb-2">
+                 <div className="w-10 h-10 bg-slate-100 rounded-2xl flex items-center justify-center">
+                    <Cog6ToothIcon className="w-6 h-6 text-slate-600" />
+                 </div>
+                 <h2 className="text-xl font-bold text-slate-800">App Settings</h2>
+               </div>
+               
                <div className="space-y-4">
                  <div className="space-y-2">
-                   <label className="text-xs font-bold text-slate-500">GAS 배포 URL</label>
-                   <input type="text" value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-[10px] font-mono outline-none" />
+                   <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-widest">Google Apps Script URL</label>
+                   <input type="text" value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-[11px] font-mono text-slate-500 focus:border-indigo-500 outline-none" />
                  </div>
-                 <button onClick={() => { localStorage.setItem('study_gas_url', gasUrl); fetchSheetData(); alert('저장되었습니다.'); }} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-2xl">저장 및 동기화</button>
+                 <button onClick={() => { localStorage.setItem('study_gas_url', gasUrl); fetchSheetData(); alert('설정이 저장됐어! 다시 시트 동기화를 시도할게.'); }} className="w-full bg-indigo-600 text-white font-bold py-5 rounded-[1.5rem] shadow-xl shadow-indigo-100 active:scale-95 transition-all">Save & Sync Now</button>
                </div>
             </div>
+
+            {/* GAS 가이드 카드 */}
+            <div className="bg-slate-800 p-8 rounded-[3rem] shadow-xl text-white space-y-6 overflow-hidden">
+               <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 bg-indigo-500/20 rounded-2xl flex items-center justify-center">
+                    <CodeBracketIcon className="w-6 h-6 text-indigo-400" />
+                 </div>
+                 <h2 className="text-lg font-bold">기록이 안 된다면? (GAS 설정 가이드)</h2>
+               </div>
+               
+               <div className="space-y-4">
+                 <p className="text-xs text-slate-400 leading-relaxed">
+                   1. 구글 시트 상단 <strong>[확장 프로그램] -> [Apps Script]</strong>를 클릭해.<br/>
+                   2. 아래 코드를 복사해서 기존 내용을 모두 지우고 붙여넣어.
+                 </p>
+                 
+                 <div className="relative group">
+                   <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => copyToClipboard(GAS_CODE_TEMPLATE)} className="p-2 bg-indigo-600 rounded-xl hover:bg-indigo-500 shadow-lg">
+                        <DocumentDuplicateIcon className="w-4 h-4 text-white" />
+                      </button>
+                   </div>
+                   <pre className="bg-slate-900 rounded-2xl p-4 text-[10px] font-mono text-indigo-300 overflow-x-auto max-h-[200px] border border-slate-700">
+                     {GAS_CODE_TEMPLATE}
+                   </pre>
+                 </div>
+
+                 <p className="text-xs text-slate-400 leading-relaxed">
+                   3. <strong>[배포] -> [새 배포]</strong> 클릭!<br/>
+                   4. 종류 선택: <strong>'웹 앱'</strong><br/>
+                   5. 액세스 권한: <strong>'모든 사용자(Anyone)'</strong>로 설정!<br/>
+                   6. 생성된 URL을 복사해서 위의 설정창에 붙여넣으면 끝!
+                 </p>
+               </div>
+            </div>
+            
+            <footer className="text-center py-4 opacity-50">
+               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">English Study Log v2.5</p>
+            </footer>
           </div>
         )}
       </main>
