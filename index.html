@@ -5,20 +5,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart English Study Log</title>
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Pretendard -->
     <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { 
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
             background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: contain; /* 모바일에서 당겨서 새로고침 방지 */
+            -webkit-tap-highlight-color: transparent; /* 모바일 터치 하이라이트 제거 */
         }
         .animate-in {
-            animation: fadeIn 0.3s ease-out;
+            animation: fadeIn 0.4s ease-out;
         }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(12px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        /* 스크롤바 숨기기 (깔끔한 UI용) */
+        ::-webkit-scrollbar {
+            display: none;
         }
     </style>
 <script type="importmap">
@@ -33,7 +40,8 @@
 }
 </script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50 text-slate-900">
+    <!-- React 앱이 렌더링될 루트 엘리먼트 -->
     <div id="root"></div>
 </body>
 </html>
